@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>计时报数（带启停）</title>
+    <style>
+        body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f5f5f5;gap:20px}
+        .num{font-size:130px;font-weight:bold;color:#222;margin:0}
+        .tip{font-size:20px;color:#666}
+        .btn-group{display:flex;gap:12px}
+        button{padding:10px 20px;font-size:18px;border:none;border-radius:8px;cursor:pointer;color:#fff}
+        .start{background:#4CAF50}
+        .pause{background:#FF9800}
+        .reset{background:#f44336}
+        button:active{opacity:0.8}
+    </style>
+</head>
+<body>
+    <div class="num" id="numBox">10</div>
+    <div class="tip">先倒數10秒 | 倒數結束後每5秒報數 | 直到90秒</div>
+    <div class="btn-group">
+        <button class="start" id="startBtn">开始</button>
+        <button class="pause" id="pauseBtn" disabled>暂停</button>
+        <button class="reset" id="resetBtn" disabled>重置</button>
+    </div>
+
+    <script>
+        const numBox = document.getElementById('numBox');
+        const startBtn = document.getElementById('startBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        
+        let currentSec = 10; // 初始倒數值：10
+        let timer = null;
+        let isCountdown = true; // 標記：是否處於倒數階段（10→0）
+        const MAX_POSITIVE_SEC = 90; // 正數最大時長
+
+        // 粵語報數（清隊列防卡頓）
+        function speakSec(sec) {
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance(`${sec}秒`);
+            utter.lang = 'zh-HK';
+            utter.volume = 1;
+            utter.rate = 1.1;
+            window.speechSynthesis.speak(utter);
+        }
+
+        // 計時核心（兼容倒數+正數）
+        function runTimer() {
+            if (isCountdown) {
+                // 倒數階段：10→9→…→0
+                numBox.textContent = currentSec;
+                speakSec(currentSec); // 倒數每一秒都發聲
+                
+                if (currentSec === 0) {
+                    // 倒數結束，切換為正數階段
+                    isCountdown = false;
+                } else {
+                    currentSec--;
+                }
+            } else {
+                // 正數階段：0→1→2→…→90，每5秒發聲
+                currentSec++;
+                numBox.textContent = currentSec;
+                
+                // 正數每5秒發聲，且不超過90秒
+                if (currentSec % 5 === 0 && currentSec <= MAX_POSITIVE_SEC) {
+                    speakSec(currentSec);
+                }
+
+                // 到90秒後自動停止
+                if (currentSec >= MAX_POSITIVE_SEC) {
+                    clearInterval(timer);
+                    timer = null;
+                    startBtn.disabled = false;
+                    pauseBtn.disabled = true;
+                }
+            }
+        }
+
+        // 開始按鈕
+        startBtn.onclick = () => {
+            if (!timer) {
+                timer = setInterval(runTimer, 1000);
+                startBtn.disabled = true;
+                pauseBtn.disabled = false;
+                resetBtn.disabled = false;
+            }
+        };
+
+        // 暫停按鈕
+        pauseBtn.onclick = () => {
+            clearInterval(timer);
+            timer = null;
+            startBtn.disabled = false;
+            pauseBtn.disabled = true;
+        };
+
+        // 重置按鈕（還原初始狀態：倒數10秒）
+        resetBtn.onclick = () => {
+            clearInterval(timer);
+            timer = null;
+            currentSec = 10;
+            isCountdown = true; // 還原為倒數階段
+            numBox.textContent = currentSec;
+            speakSec(currentSec); // 重置後報「10秒」
+            startBtn.disabled = false;
+            pauseBtn.disabled = true;
+            resetBtn.disabled = true;
+        };
+
+        // 初始報「10秒」（對應倒數起點）
+        speakSec(10);
+    </script>
+</body>
+</html>
