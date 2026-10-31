@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>小巴巡查記錄 v1.5</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f5f5f5;
+    color: #333;
+    overflow-x: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* 輸入框一定要可以選字，否則Android可能打唔到字 */
+  input, textarea {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* ===== 頂部導航欄 ===== */
+  .navbar {
+    background: #1565c0;
+    color: white;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  .navbar h1 { font-size: 18px; font-weight: 600; }
+  .navbar .back-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+  .navbar .right-actions { display: flex; gap: 8px; }
+  .navbar .icon-btn {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .navbar .icon-btn:active { background: rgba(255,255,255,0.3); }
+
+  /* ===== 頁面切換 ===== */
+  .page { display: none; padding-bottom: 12px; }
+  .page.active { display: block; }
+
+  /* ===== 任務列表頁 ===== */
+  .task-list { padding: 12px; }
+  .task-card {
+    background: white;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .task-card:active { background: #f0f0f0; }
+  .task-card .task-info { flex: 1; }
+  .task-card .task-name { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .task-card .task-meta { font-size: 13px; color: #888; }
+  .task-card .task-count {
+    background: #e3f2fd;
+    color: #1565c0;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #aaa;
+  }
+  .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+  /* ===== 新增任務彈窗 ===== */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 360px;
+    padding: 20px;
+  }
+  .modal h3 { margin-bottom: 16px; font-size: 18px; }
+  .modal label {
+    display: block;
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 6px;
+    margin-top: 12px;
+  }
+  .modal input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 15px;
+  }
+  .modal .modal-date {
+    font-size: 14px;
+    color: #666;
+    padding: 10px 0;
+  }
+  .modal-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+  }
+  .modal-buttons button {
+    flex: 1;
+    padding: 12px;
+    border-radius: 6px;
+    border: none;
+    font-size: 15px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .btn-cancel { background: #f0f0f0; color: #666; }
+  .btn-confirm { background: #1565c0; color: white; }
+  .btn-confirm:active { background: #0d47a1; }
+
+  /* ===== 表格區域 ===== */
+  .table-container {
+    overflow-x: auto;
+    background: white;
+    margin: 8px;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    transition: padding-bottom 0.2s ease;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 20px;
+    min-width: 440px;
+  }
+  th {
+    background: #1565c0;
+    color: white;
+    padding: 8px 4px;
+    font-weight: 600;
+    font-size: 17px;
+    text-align: center;
+    position: sticky;
+    top: 0;
+    white-space: nowrap;
+    border: 1px solid #0d47a1;
+  }
+  td {
+    padding: 6px 3px;
+    border: 1px solid #ccc;
+    text-align: center;
+    min-width: 50px;
+    cursor: pointer;
+  }
+  tr:nth-child(even) td { background: #fafafa; }
+  tr.selected td { background: #e3f2fd !important; }
+  td:active { background: #e8f5e9; }
+  td.license { font-weight: 600; min-width: 68px; }
+  td.time { font-variant-numeric: tabular-nums; min-width: 56px; }
+  td.people { font-variant-numeric: tabular-nums; min-width: 44px; }
+  td.remark { color: #888; min-width: 60px; font-size: 18px; }
+  td.empty-cell { color: #ccc; }
+  tr.new-row td { color: #aaa; font-style: italic; }
+
+  .col-license { width: 20%; }
+  .col-arrive { width: 15%; }
+  .col-depart { width: 15%; }
+  .col-on { width: 12%; }
+  .col-off { width: 12%; }
+  .col-remark { width: 26%; }
+
+  /* ===== 工具列 ===== */
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f5f5f5;
+  }
+  .toolbar button {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    color: #555;
+  }
+  .toolbar button:active { background: #f0f0f0; }
+
+  /* ===== 數字鍵盤 ===== */
+  .keyboard {
+    display: none;
+    background: #e0e0e0;
+    padding: 6px;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 150;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.15);
+  }
+  .keyboard.active { display: block; }
+  .keyboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 6px 4px;
+    font-size: 12px;
+    color: #666;
+  }
+  .keyboard-header .field-label { font-weight: 500; color: #1565c0; }
+  .keyboard-header .kb-btn {
+    background: none;
+    border: none;
+    color: #1565c0;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 2px 6px;
+  }
+  .keyboard-header .add-btn {
+    background: #1565c0;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    border: none;
+    cursor: pointer;
+    margin-right: 6px;
+  }
+  /* ===== 備註輸入面板 ===== */
+  .remark-panel {
+    display: none;
+    background: #e0e0e0;
+    padding: 10px;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 150;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.15);
+  }
+  .remark-panel.active { display: block; }
+  .remark-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .remark-panel-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1565c0;
+  }
+  .remark-panel-btn {
+    background: #1565c0;
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .remark-panel-btn:active { background: #0d47a1; }
+  .remark-input-box {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    font-size: 16px;
+    background: white;
+    min-height: 40px;
+  }
+
+  .keyboard-keys {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+  }
+  .key-btn {
+    background: white;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 0;
+    font-size: 18px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+  .key-btn:active { background: #d0d0d0; }
+  .key-btn.wide { grid-column: span 1; }
+  .key-btn.func { background: #bdbdbd; font-size: 14px; }
+  .key-btn.func:active { background: #9e9e9e; }
+  .key-btn.confirm { background: #4caf50; color: white; font-size: 14px; }
+  .key-btn.confirm:active { background: #388e3c; }
+
+  /* 鍵盤頂部當前值顯示 */
+  .current-value {
+    background: white;
+    margin: 0 0 6px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 18px;
+    font-weight: 500;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ===== 確認彈窗 ===== */
+  .confirm-dialog {
+    background: white;
+    border-radius: 12px;
+    width: 85%;
+    max-width: 320px;
+    padding: 20px;
+    text-align: center;
+  }
+  .confirm-dialog h3 { margin-bottom: 10px; font-size: 17px; }
+  .confirm-dialog p { color: #666; font-size: 14px; margin-bottom: 18px; }
+  .confirm-dialog .modal-buttons { margin-top: 0; }
+
+  /* ===== 操作選單 ===== */
+  .action-menu {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-radius: 12px 12px 0 0;
+    padding: 8px 0 20px;
+    z-index: 250;
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
+  }
+  .action-menu.active { transform: translateY(0); }
+  .action-menu-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 240;
+  }
+  .action-menu-overlay.active { display: block; }
+  .action-menu .menu-item {
+    padding: 14px 20px;
+    font-size: 15px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .action-menu .menu-item:active { background: #f5f5f5; }
+  .action-menu .menu-item .menu-icon { font-size: 18px; width: 24px; text-align: center; }
+  .action-menu .menu-cancel {
+    margin: 8px 12px 0;
+    padding: 12px;
+    text-align: center;
+    background: #f5f5f5;
+    border-radius: 8px;
+    color: #666;
+    font-size: 15px;
+    cursor: pointer;
+  }
+
+  /* 隱藏 file input */
+  #fileInput { display: none; }
+
+  /* toast 提示 */
+  .toast {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.75);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    z-index: 999;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- ============ 任務列表頁 ============ -->
+<div id="page-tasks" class="page active">
+  <div class="navbar">
+    <h1>小巴巡查記錄</h1>
+    <div class="right-actions">
+      <button class="icon-btn" onclick="showActionMenu()" title="更多">⋮</button>
+      <button class="icon-btn" onclick="showNewTaskModal()" title="新增">+</button>
+    </div>
+  </div>
+  <div class="task-list" id="taskList">
+    <!-- 動態生成 -->
+  </div>
+</div>
+
+<!-- ============ 任務詳情頁 ============ -->
+<div id="page-detail" class="page">
+  <div class="navbar">
+    <button class="back-btn" onclick="goBack()">←</button>
+    <h1 id="detailTitle">任務詳情</h1>
+    <div class="right-actions">
+      <button class="icon-btn" onclick="showDetailMenu()" title="更多">⋮</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button onclick="addRecord()">+ 新增</button>
+    <button onclick="changeFontSize(-1)">A- 縮字</button>
+    <button onclick="changeFontSize(1)">A+ 大字</button>
+    <button onclick="exportCurrentTask()">匯出</button>
+  </div>
+  <div class="table-container" id="tableContainer">
+    <table id="recordTable">
+      <thead>
+        <tr>
+          <th class="col-license">車牌</th>
+          <th class="col-arrive">到站</th>
+          <th class="col-depart">開出</th>
+          <th class="col-on">上客</th>
+          <th class="col-off">落客</th>
+          <th class="col-remark">備註</th>
+        </tr>
+      </thead>
+      <tbody id="recordBody">
+        <!-- 動態生成 -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============ 新增任務彈窗 ============ -->
+<div class="modal-overlay" id="newTaskModal">
+  <div class="modal">
+    <h3>新增任務</h3>
+    <div class="modal-date" id="newTaskDate"></div>
+    <label>任務名稱（線路 / 站點）</label>
+    <input type="text" id="newTaskName" placeholder="例如：1號線·中環站" maxlength="30">
+    <div class="modal-buttons">
+      <button class="btn-cancel" onclick="hideNewTaskModal()">取消</button>
+      <button class="btn-confirm" onclick="createTask()">建立</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 確認彈窗 ============ -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="confirm-dialog">
+    <h3 id="confirmTitle">確認修改？</h3>
+    <p id="confirmMsg">此操作將會修改原有數據</p>
+    <div class="modal-buttons">
+      <button class="btn-cancel" onclick="hideConfirm()">取消</button>
+      <button class="btn-confirm" onclick="doConfirm()">確認</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 操作選單（任務列表） ============ -->
+<div class="action-menu-overlay" id="actionMenuOverlay" onclick="hideActionMenu()"></div>
+<div class="action-menu" id="actionMenu">
+  <div class="menu-item" onclick="exportAllTasks()">
+    <span class="menu-icon">📤</span>匯出全部數據
+  </div>
+  <div class="menu-item" onclick="document.getElementById('fileInput').click(); hideActionMenu();">
+    <span class="menu-icon">📥</span>匯入數據
+  </div>
+  <div class="menu-cancel" onclick="hideActionMenu()">取消</div>
+</div>
+
+<!-- ============ 操作選單（任務詳情） ============ -->
+<div class="action-menu-overlay" id="detailMenuOverlay" onclick="hideDetailMenu()"></div>
+<div class="action-menu" id="detailMenu">
+  <div class="menu-item" onclick="exportCurrentTask(); hideDetailMenu();">
+    <span class="menu-icon">📤</span>匯出此任務 (CSV)
+  </div>
+  <div class="menu-item" onclick="confirmDeleteTask()">
+    <span class="menu-icon">🗑️</span>刪除此任務
+  </div>
+  <div class="menu-cancel" onclick="hideDetailMenu()">取消</div>
+</div>
+
+<input type="file" id="fileInput" accept=".csv,.txt,.json" onchange="importData(event)">
+
+<!-- ============ 數字鍵盤 ============ -->
+<div class="keyboard" id="keyboard">
+  <div class="keyboard-header">
+    <div>
+      <button class="add-btn" onclick="addRecordFromKeyboard()">+ 新增記錄</button>
+      <span class="field-label" id="keyboardFieldLabel">車牌</span>
+    </div>
+    <button class="kb-btn" onclick="closeKeyboard()">完成</button>
+  </div>
+  <div class="current-value" id="currentValue">—</div>
+  <div class="keyboard-keys">
+    <button class="key-btn" onclick="typeKey('1')">1</button>
+    <button class="key-btn" onclick="typeKey('2')">2</button>
+    <button class="key-btn" onclick="typeKey('3')">3</button>
+    <button class="key-btn" onclick="typeKey('4')">4</button>
+    <button class="key-btn" onclick="typeKey('5')">5</button>
+    <button class="key-btn" onclick="typeKey('6')">6</button>
+    <button class="key-btn" onclick="typeKey('7')">7</button>
+    <button class="key-btn" onclick="typeKey('8')">8</button>
+    <button class="key-btn" onclick="typeKey('9')">9</button>
+    <button class="key-btn func" onclick="clearInput()">清空</button>
+    <button class="key-btn" onclick="typeKey('0')">0</button>
+    <button class="key-btn func" onclick="backspace()">⌫</button>
+  </div>
+</div>
+
+<!-- ===== 備註輸入面板 ===== -->
+<div class="remark-panel" id="remarkPanel">
+  <div class="remark-panel-header">
+    <div class="remark-panel-title">備註 <span id="remarkRowLabel">第1行</span></div>
+    <button class="remark-panel-btn" onclick="closeRemarkPanel()">完成</button>
+  </div>
+  <input type="text" class="remark-input-box" id="remarkInputBox" placeholder="輸入備註..." maxlength="30">
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ========== 數據存儲 ==========
+const STORAGE_KEY = 'minibus_inspection_data';
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : { tasks: [] };
+  } catch (e) {
+    return { tasks: [] };
+  }
+}
+
+function saveData(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+let appData = loadData();
+let currentTaskId = null;
+let currentRowIndex = -1;
+let currentFontSize = 20;
+let currentField = null;
+let currentInputValue = '';
+let confirmCallback = null;
+
+// ========== 任務列表 ==========
+function renderTaskList() {
+  const list = document.getElementById('taskList');
+  if (appData.tasks.length === 0) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <div>仲未有任務</div>
+        <div style="font-size:13px; margin-top:6px;">按右上角 + 建立第一個任務</div>
+      </div>
+    `;
+    return;
+  }
+  list.innerHTML = appData.tasks.map(t => `
+    <div class="task-card" onclick="openTask('${t.id}')">
+      <div class="task-info">
+        <div class="task-name">${escapeHtml(t.name)}</div>
+        <div class="task-meta">${t.date} · ${t.records.length} 條記錄</div>
+      </div>
+      <div class="task-count">${t.records.length}</div>
+    </div>
+  `).join('');
+}
+
+function showNewTaskModal() {
+  const now = new Date();
+  const dateStr = formatDate(now) + ' ' + formatTime(now);
+  document.getElementById('newTaskDate').textContent = '自動記錄時間：' + dateStr;
+  document.getElementById('newTaskName').value = '';
+  document.getElementById('newTaskModal').classList.add('active');
+}
+
+function hideNewTaskModal() {
+  document.getElementById('newTaskModal').classList.remove('active');
+}
+
+function createTask() {
+  const name = document.getElementById('newTaskName').value.trim();
+  if (!name) {
+    showToast('請輸入任務名稱');
+    return;
+  }
+  const now = new Date();
+  const task = {
+    id: 't_' + now.getTime(),
+    name: name,
+    date: formatDate(now),
+    createdAt: now.toISOString(),
+    records: [
+      makeEmptyRecord(),
+      makeEmptyRecord(),
+      makeEmptyRecord(),
+      makeEmptyRecord(),
+      makeEmptyRecord()
+    ]
+  };
+  appData.tasks.unshift(task);
+  saveData(appData);
+  hideNewTaskModal();
+  renderTaskList();
+  showToast('任務已建立');
+}
+
+function makeEmptyRecord() {
+  return {
+    license: '',
+    arrive: '',
+    depart: '',
+    on: '',
+    off: '',
+    remark: ''
+  };
+}
+
+// ========== 任務詳情 ==========
+function openTask(taskId) {
+  currentTaskId = taskId;
+  const task = appData.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  document.getElementById('detailTitle').textContent = task.name;
+  renderRecords();
+  document.getElementById('page-tasks').classList.remove('active');
+  document.getElementById('page-detail').classList.add('active');
+}
+
+function goBack() {
+  closeKeyboard();
+  currentTaskId = null;
+  currentRowIndex = -1;
+  currentField = null;
+  document.getElementById('page-detail').classList.remove('active');
+  document.getElementById('page-tasks').classList.add('active');
+  renderTaskList();
+}
+
+function renderRecords() {
+  const task = appData.tasks.find(t => t.id === currentTaskId);
+  if (!task) return;
+  const tbody = document.getElementById('recordBody');
+  tbody.innerHTML = task.records.map((r, i) => `
+    <tr class="${i === currentRowIndex ? 'selected' : ''}" data-row="${i}">
+      <td class="license ${!r.license ? 'empty-cell' : ''}" onclick="openKeyboard(${i}, 'license')">
+        ${r.license || '—'}
+      </td>
+      <td class="time ${!r.arrive ? 'empty-cell' : ''}" onclick="handleTimeClick(${i}, 'arrive')">
+        ${r.arrive || '—'}
+      </td>
+      <td class="time ${!r.depart ? 'empty-cell' : ''}" onclick="handleTimeClick(${i}, 'depart')">
+        ${r.depart || '—'}
+      </td>
+      <td class="people on-cell ${!r.on ? 'empty-cell' : ''}" onclick="openKeyboard(${i}, 'on')">
+        ${r.on || '—'}
+      </td>
+      <td class="people off-cell ${!r.off ? 'empty-cell' : ''}" onclick="openKeyboard(${i}, 'off')">
+        ${r.off || '—'}
+      </td>
+      <td class="remark ${!r.remark ? 'empty-cell' : ''}" onclick="openRemarkInput(${i}, event)">
+        ${r.remark || '備註'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+// ========== 時間欄點擊邏輯 ==========
+function handleTimeClick(rowIndex, field) {
+  const task = appData.tasks.find(t => t.id === currentTaskId);
+  const record = task.records[rowIndex];
+  const currentVal = record[field];
+
+  if (!currentVal) {
+    const now = new Date();
+    record[field] = formatTime(now);
+    saveData(appData);
+    renderRecords();
+    autoAddRow();
+  } else {
+    const now = new Date();
+    const newTime = formatTime(now);
+    showConfirm(
+      '更新為現在時間？',
+      `原來：${currentVal}\n更新後：${newTime}`,
+      () => {
+        record[field] = newTime;
+        saveData(appData);
+        renderRecords();
+        showToast('時間已更新');
+      }
+    );
+  }
+}
+
+// ========== 鍵盤彈出時底部空間調整 ==========
+// 給表格容器加 padding-bottom，確保內容唔會俾鍵盤遮住
+function adjustForKeyboard(panelEl) {
+  const tableContainer = document.getElementById('tableContainer');
+  if (!tableContainer || !panelEl) return;
+  const kbHeight = panelEl.offsetHeight;
+  // 加少少緩衝，唔好貼住鍵盤頂
+  tableContainer.style.paddingBottom = (kbHeight + 12) + 'px';
+}
+
+function resetTablePadding() {
+  const tableContainer = document.getElementById('tableContainer');
+  if (tableContainer) {
+    tableContainer.style.paddingBottom = '';
+  }
+}
+
+// 滾動到選中行，確保佢喺鍵盤上方可見範圍內
+function scrollRowIntoViewAboveKeyboard(rowIndex) {
+  const row = document.querySelector(`tr[data-row="${rowIndex}"]`);
+  if (!row) return;
+
+  // 用 scrollIntoView 先滾動到大致位置
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // 再微調：確保行底部唔會低於可視區域減去鍵盤高度
+  setTimeout(() => {
+    const keyboard = document.getElementById('keyboard');
+    const remarkPanel = document.getElementById('remarkPanel');
+    let kbHeight = 0;
+    if (keyboard && keyboard.classList.contains('active')) {
+      kbHeight = keyboard.offsetHeight;
+    } else if (remarkPanel && remarkPanel.classList.contains('active')) {
+      kbHeight = remarkPanel.offsetHeight;
+    }
+    if (kbHeight === 0) return;
+
+    const rowRect = row.getBoundingClientRect();
+    const visibleBottom = window.innerHeight - kbHeight - 8;
+
+    // 如果行底部低於可見區域底部，向上滾
+    if (rowRect.bottom > visibleBottom) {
+      const diff = rowRect.bottom - visibleBottom + 8;
+      window.scrollBy({ top: diff, behavior: 'smooth' });
+    }
+    // 如果行頂部喺 navbar 下面隱藏咗，向下滾少少
+    const navbar = document.querySelector('.navbar');
+    const toolbar = document.querySelector('.toolbar');
+    const topOffset = (navbar ? navbar.offsetHeight : 0) + (toolbar ? toolbar.offsetHeight : 0) + 8;
+    if (rowRect.top < topOffset) {
+      const diff = topOffset - rowRect.top;
+      window.scrollBy({ top: -diff, behavior: 'smooth' });
+    }
+  }, 300);
+}
+
+// ========== 數字鍵盤 ==========
+const fieldLabels = {
+  license: '車牌',
+  arrive: '到站時間',
+  depart: '開出時間',
+  on: '上客人數',
+  off: '落客人數',
+  remark: '備註'
+};
+
+function openKeyboard(rowIndex, field) {
+  const task = appData.tasks.find(t => t.id === currentTaskId);
+  const record = task.records[rowIndex];
+
+  currentRowIndex = rowIndex;
+  currentField = field;
+  currentInputValue = record[field] || '';
+
+  document.getElementById('keyboardFieldLabel').textContent = fieldLabels[field];
+  document.getElementById('currentValue').textContent = currentInputValue || '—';
+
+  // 先關備註面板
+  const remarkPanel = document.getElementById('remarkPanel');
+  if (remarkPanel) remarkPanel.classList.remove('active');
+
+  document.getElementById('keyboard').classList.add('active');
+
+  renderRecords();
+
+  // 調整底部空間 + 滾動到選中行
+  setTimeout(() => {
+    const kb = document.getElementById('keyboard');
+    adjustForKeyboard(kb);
+    scrollRowIntoViewAboveKeyboard(rowIndex);
+  }, 50);
+}
+
+function closeKeyboard() {
+  document.getElementById('keyboard').classList.remove('active');
+  const remarkPanel = document.getElementById('remarkPanel');
+  if (remarkPanel) remarkPanel.classList.remove('active');
+  resetTablePadding();
+  currentRowIndex = -1;
+  currentField = null;
+  currentInputValue = '';
+  renderRecords();
+}
+
+function typeKey(key) {
+  const maxLen = getMaxLength(currentField);
+  if (currentInputValue.length >= maxLen) return;
+  currentInputValue += key;
+  document.getElementById('currentValue').textContent = currentInputValue;
+  updateCurrentCell();
+}
+
+function backspace() {
+  currentInputValue = currentInputValue.slice(0, -1);
+  document.getElementById('currentValue').textContent = currentInputValue || '—';
+  updateCurrentCell();
+}
+
+function clearInput() {
+  currentInputValue = '';
+  document.getElementById('currentValue').textContent = '—';
+  updateCurrentCell();
+}
+
+function getMaxLength(field) {
+  switch (field) {
+    case 'license': return 10;
+    case 'on': return 3;
+    case 'off': return 3;
+    case 'arrive': return 5;
+    case 'depart': return 5;
+    case 'remark': return 20;
+    default: return 10;
+  }
+}
+
+function updateCurrentCell() {
+  if (currentRowIndex < 0 || !currentField) return;
+  const task = appData.tasks.find(t => t.id === currentTaskId);
+  if (!task || !task.records[currentRowIndex]) return;
+
+  task.records[currentRowIndex][currentField] = currentInputValue;
+  saveData(appData);
+
+  const row = document.querySelector(`tr[data-row="${currentRowIndex}"]`);
+  if (row) {
+    const fieldClass = {
+      license: 'license',
+      arrive: 'time',
+      depart: 'time',
+      on: 'on-cell',
+      off: 'off-cell',
+      remark: 'remark'
+    }[currentField];
+    const cell = row.querySelector(`td.${fieldClass}`);
+    if (cell) {
+      cell.textContent = currentInputValue || (currentField === 'remark' ? '備註' : '—');
+      cell.classList.toggle('empty-cell', !currentInputValue);
+    }
+  }
+
+  if (currentField === 'license' && currentInputValue.length >= 2) {
+    autoAddRow();
+  }
+}
+
+// ========== 字體縮放 ==========
+function changeFontSize(delta) {
+  currentFontSize = Math.max(14, Math.min(28, currentFontSize + delta * 2));
+  const table = document.getElementById('recordTable');
+  if (table) {
+    table.style.fontSize = currentFontSize + 'px';
+  }
+  const ths = document.querySelectorAll('#recordTable th');
+  ths.forEach(th => {
+    th.style.fontSize = (currentFontSize - 3) + 'px';
+  });
+  showToast('字體大小：' + currentFontSize + 'px');
+}
+
+// ========== 自動新增行 ==========
+function autoAddRow() {
+  const task = appData.tasks.find(t => t.id === currentTaskId);
+  if (!task) return;
+  const lastRecord = task.records[task.records.length - 1];
+  if (lastRecord && lastRecord.license) {
+    task.records.push(makeEmptyRecord());
+    saveData(appData);
+    renderRecords();
+    const row = document.querySelector(`tr[data-row="${currentRowIndex}"]`);
+    if (row) row.classList.add('selected');
+  }
+}
+
+// ========== 備註輸入面板 ==========
+let remarkInputEl = null;
+
+function openRemarkInput(rowIndex, event) {
+  event.stopPropagation();
+  const task = appData.tasks.find(t => t.id === currentTaskId);
+  if (!task) return;
+  closeKeyboard();
+
+  currentRowIndex = rowIndex;
+  currentField = 'remark';
+
+  const panel = document.getElementById('remarkPanel');
+  const input = document.getElementById('remarkInputBox');
+  const label = document.getElementById('remarkRowLabel');
+
+  label.textContent = '第' + (rowIndex + 1) + '行';
+  input.value = task.records[rowIndex].remark || '';
+
+  renderRecords();
+  const row = document.querySelector(`tr[data-row="${rowIndex}"]`);
+  if (row) row.classList.add('selected');
+
+  panel.classList.add('active');
+
+  setTimeout(() => {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }, 100);
+
+  // 調整底部空間 + 滾動到選中行
+  setTimeout(() => {
+    adjustForKeyboard(panel);
+    scrollRowIntoViewAboveKeyboard(rowIndex);
+  }, 150);
+
+  if (!remarkInputEl) {
+    remarkInputEl = input;
+    input.addEventListener('input', function() {
+      const task = appData.tasks.find(t => t.id === currentTaskId);
+      if (task && task.records[currentRowIndex]) {
+        task.records[currentRowIndex].remark = input.value;
+        saveData(appData);
+        const row = document.querySelector(`tr[data-row="${currentRowIndex}"]`);
+        if (row) {
+          const cell = row.querySelector('td.remark');
+          if (cell) {
+            cell.textContent = input.value || '備註';
+            cell.classList.toggle('empty-cell', !input.value);
+          }
+        }
+      }
+    });
+  }
+}
+
+function closeRemarkPanel() {
+  const panel = document.getElementById('remarkPanel');
+  const input = document.getElementById('remarkInputBox');
+  if (input) input.blur();
+  panel.classList.remove('active');
+  resetTablePadding();
+  currentField = null;
+  renderRecords();
+}
+
+function addRecord() {
+  const task = appData.tasks.find(t => t.id === currentTaskId);
+  if (!task) return;
+  task.records.push(makeEmptyRecord());
+  saveData(appData);
+  renderRecords();
+  showToast('已新增記錄');
+  const newIndex = task.records.length - 1;
+  setTimeout(() => openKeyboard(newIndex, 'license'), 100);
+}
+
+function addRecordFromKeyboard() {
+  addRecord();
+}
+
+// ========== 確認彈窗 ==========
+function showConfirm(title, msg, callback) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMsg').textContent = msg;
+  confirmCallback = callback;
+  document.getElementById('confirmModal').classList.add('active');
+}
+
+function hideConfirm() {
+  document.getElementById('confirmModal').classList.remove('active');
+  confirmCallback = null;
+}
+
+function doConfirm() {
+  if (confirmCallback) confirmCallback();
+  hideConfirm();
+}
+
+// ========== 操作選單 ==========
+function showActionMenu() {
+  document.getElementById('actionMenuOverlay').classList.add('active');
+  document.getElementById('actionMenu').classList.add('active');
+}
+
+function hideActionMenu() {
+  document.getElementById('actionMenuOverlay').classList.remove('active');
+  document.getElementById('actionMenu').classList.remove('active');
+}
+
+function showDetailMenu() {
+  document.getElementById('detailMenuOverlay').classList.add('active');
+  document.getElementById('detailMenu').classList.add('active');
+}
+
+function hideDetailMenu() {
+  document.getElementById('detailMenuOverlay').classList.remove('active');
+  document.getElementById('detailMenu').classList.remove('active');
+}
+
+// ========== 匯出 ==========
+function exportAllTasks() {
+  hideActionMenu();
+  if (appData.tasks.length === 0) {
+    showToast('冇數據可匯出');
+    return;
+  }
+  let csv = '\uFEFF';
+  csv += '任務名稱,日期,車牌,到站,開出,上客,落客,備註\n';
+  appData.tasks.forEach(task => {
+    task.records.forEach(r => {
+      csv += `"${task.name}","${task.date}","${r.license}","${r.arrive}","${r.depart}","${r.on}","${r.off}","${r.remark}"\n`;
+    });
+  });
+  downloadFile(csv, `小巴巡查記錄_${formatDate(new Date())}.csv`, 'text/csv');
+  showToast('匯出成功');
+}
+
+function exportCurrentTask() {
+  const task = appData.tasks.find(t => t.id === currentTaskId);
+  if (!task) return;
+  let csv = '\uFEFF';
+  csv += `"${task.name}","${task.date}","","","","",""\n`;
+  csv += '車牌,到站,開出,上客,落客,備註\n';
+  task.records.forEach(r => {
+    csv += `"${r.license}","${r.arrive}","${r.depart}","${r.on}","${r.off}","${r.remark}"\n`;
+  });
+  const safeName = task.name.replace(/[\\/:*?"<>|]/g, '_');
+  downloadFile(csv, `${safeName}_${task.date}.csv`, 'text/csv');
+  showToast('匯出成功');
+}
+
+function downloadFile(content, filename, type) {
+  const blob = new Blob([content], { type: type + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ========== 匯入 ==========
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      let content = e.target.result;
+      if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+
+      const rows = parseCSV(content);
+      if (rows.length < 2) {
+        showToast('文件格式錯誤');
+        return;
+      }
+
+      const headers = rows[0].map(h => h.trim().toLowerCase());
+      const hasTaskName = headers.includes('任務名稱') || headers.includes('任务名称');
+
+      if (hasTaskName) {
+        const taskMap = {};
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (row.length < 8) continue;
+          const taskName = row[0];
+          const taskDate = row[1];
+          const record = {
+            license: row[2],
+            arrive: row[3],
+            depart: row[4],
+            on: row[5],
+            off: row[6],
+            remark: row[7]
+          };
+          if (!taskMap[taskName]) {
+            taskMap[taskName] = {
+              id: 't_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+              name: taskName,
+              date: taskDate,
+              createdAt: new Date().toISOString(),
+              records: []
+            };
+          }
+          taskMap[taskName].records.push(record);
+        }
+        const tasks = Object.values(taskMap);
+        if (tasks.length > 0) {
+          showConfirm(
+            '確認匯入？',
+            `將會匯入 ${tasks.length} 個任務，與現有數據合併`,
+            () => {
+              tasks.forEach(t => appData.tasks.unshift(t));
+              saveData(appData);
+              renderTaskList();
+              showToast('匯入成功');
+            }
+          );
+        }
+      } else {
+        const records = [];
+        let dataStartIndex = 1;
+        let importedTaskName = file.name.replace(/\.[^.]+$/, '');
+        let importedTaskDate = formatDate(new Date());
+
+        const firstRow = rows[0].map(h => h.trim());
+        if (firstRow.length >= 6 && firstRow[0] && firstRow[0] !== '車牌' && firstRow[2] === '') {
+          importedTaskName = firstRow[0];
+          if (firstRow[1]) importedTaskDate = firstRow[1];
+          dataStartIndex = 2;
+        }
+
+        for (let i = dataStartIndex; i < rows.length; i++) {
+          const row = rows[i];
+          if (row.length < 6) continue;
+          records.push({
+            license: row[0],
+            arrive: row[1],
+            depart: row[2],
+            on: row[3],
+            off: row[4],
+            remark: row[5]
+          });
+        }
+        if (records.length > 0) {
+          const task = {
+            id: 't_' + Date.now(),
+            name: importedTaskName,
+            date: importedTaskDate,
+            createdAt: new Date().toISOString(),
+            records: records
+          };
+          appData.tasks.unshift(task);
+          saveData(appData);
+          renderTaskList();
+          showToast('匯入成功');
+        }
+      }
+    } catch (err) {
+      showToast('匯入失敗：' + err.message);
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cell += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        row.push(cell);
+        cell = '';
+      } else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell);
+        rows.push(row);
+        row = [];
+        cell = '';
+      } else {
+        cell += ch;
+      }
+    }
+  }
+  if (cell || row.length > 0) {
+    row.push(cell);
+    rows.push(row);
+  }
+  return rows.filter(r => r.length > 0 && r.some(c => c.trim()));
+}
+
+// ========== 刪除任務 ==========
+function confirmDeleteTask() {
+  hideDetailMenu();
+  const task = appData.tasks.find(t => t.id === currentTaskId);
+  if (!task) return;
+  showConfirm(
+    '刪除任務？',
+    `確定要刪除「${task.name}」嗎？\n此操作無法還原`,
+    () => {
+      appData.tasks = appData.tasks.filter(t => t.id !== currentTaskId);
+      saveData(appData);
+      goBack();
+      showToast('已刪除');
+    }
+  );
+}
+
+// ========== 工具函數 ==========
+function formatDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatTime(d) {
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+// 初始化
+renderTaskList();
+</script>
+</body>
+</html>
