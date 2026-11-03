@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>超慢跑 · 瞇眼跑 180BPM v1.1</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang HK", "Microsoft JhengHei", sans-serif;
+    background: #0f0f1a;
+    color: #fff;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  #stage {
+    position: relative;
+    width: 100%; height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: clamp(30px, 6vh, 60px);
+    padding: 20px;
+  }
+
+  /* ===== 大時鐘 ===== */
+  .clock-display {
+    font-size: clamp(80px, 20vw, 240px);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 4px;
+    text-shadow: 0 4px 40px rgba(0,0,0,0.8), 0 0 60px rgba(255,255,255,0.1);
+    line-height: 1;
+    transition: color 0.5s;
+  }
+
+  /* ===== 節拍指示燈 ===== */
+  .beat-dot {
+    width: clamp(12px, 2vw, 20px);
+    height: clamp(12px, 2vw, 20px);
+    border-radius: 50%;
+    background: #333;
+    transition: background 0.06s, box-shadow 0.06s;
+    margin-bottom: 10px;
+  }
+  .beat-dot.active {
+    background: #ffeb3b;
+    box-shadow: 0 0 20px #ffeb3b, 0 0 40px #ffeb3b;
+  }
+
+  /* ===== 按鈕群 ===== */
+  .btn-group {
+    display: flex;
+    gap: clamp(10px, 2vw, 20px);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .btn {
+    background: rgba(255,255,255,0.12);
+    border: 2px solid rgba(255,255,255,0.25);
+    color: #fff;
+    border-radius: 14px;
+    padding: clamp(14px, 3vh, 24px) clamp(28px, 5vw, 48px);
+    font-size: clamp(20px, 3.5vw, 34px);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s, border-color 0.15s;
+    white-space: nowrap;
+    min-width: 120px;
+  }
+  .btn:active { transform: scale(0.96); }
+  .btn-primary {
+    background: rgba(76, 175, 80, 0.6);
+    border-color: rgba(76, 175, 80, 0.9);
+  }
+  .btn-primary:active { background: rgba(76, 175, 80, 0.8); }
+  .btn-warn {
+    background: rgba(255, 152, 0, 0.6);
+    border-color: rgba(255, 152, 0, 0.9);
+  }
+  .btn-warn:active { background: rgba(255, 152, 0, 0.8); }
+  .btn-ghost {
+    background: transparent;
+    border-color: rgba(255,255,255,0.3);
+  }
+
+  /* ===== 完成提示 ===== */
+  .done-text {
+    position: absolute;
+    bottom: 15%;
+    font-size: clamp(20px, 3vw, 32px);
+    color: #8bc34a;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+  .done-text.show { opacity: 1; }
+
+  /* ===== 手機端微調 ===== */
+  @media (max-width: 480px) {
+    .clock-display { font-size: 72px; letter-spacing: 2px; }
+    .btn { padding: 14px 22px; font-size: 18px; min-width: 90px; border-radius: 12px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="beat-dot" id="beatDot"></div>
+  <div class="clock-display" id="clockDisplay">00:00</div>
+  <div class="btn-group">
+    <button class="btn btn-primary" id="startBtn">開始</button>
+    <button class="btn btn-warn" id="pauseBtn">暫停</button>
+    <button class="btn" id="resetBtn">重置</button>
+    <button class="btn btn-ghost" id="fullscreenBtn">全螢幕</button>
+  </div>
+  <div class="done-text" id="doneText">今日訓練完成，做得好！</div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ============================================================
+   * 超慢跑 · 瞇眼跑 v1.0
+   * 180 BPM · 31分鐘倒數 · 高低音交替節拍 · 每分鐘變音調
+   * ============================================================ */
+
+  var VERSION = '1.1';
+  var TOTAL_MS = 31 * 60 * 1000;   // 31分鐘
+  var BPM = 180;
+  var BEAT_MS = 60000 / BPM;       // 每拍 333.33ms
+
+  // 兩組高低音，每分鐘交替（A組=高音階段，B組=低音階段）
+  // A組 = 一開始嗰分鐘嘅音調（1200/900）
+  // B組 = 16:30 左右嘅音調（600/350）
+  var TONE_SET_A = [1200, 900];  // 高組
+  var TONE_SET_B = [600, 350];   // 低組
+
+  // ===== 狀態 =====
+  var isRunning = false;
+  var isPaused = false;
+  var isFinished = false;
+  var elapsed = 0;
+  var lastTick = 0;
+  var beatAccum = 0;
+  var beatCount = 0; // 拍數，用來判斷高音定低音（單數高、雙數低）
+
+  var audioCtx = null;
+  var audioReady = false;
+  var audioStartTime = 0;      // 音頻層面嘅開始時間（audioCtx.currentTime）
+  var scheduledBeats = 0;      // 已經預調度咗嘅拍數
+  var SCHEDULE_AHEAD = 1.5;    // 預先調度未來 1.5 秒嘅節拍（秒）
+
+  var lastStartAt = 0; // 防重複觸發
+
+  // ===== DOM =====
+  var clockEl = document.getElementById('clockDisplay');
+  var beatDotEl = document.getElementById('beatDot');
+  var doneTextEl = document.getElementById('doneText');
+
+  // ===== 音頻 =====
+  function initAudio() {
+    if (audioReady) return true;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      audioCtx = new AC();
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      audioReady = true;
+      return true;
+    } catch (e) {
+      console.warn('AudioContext init failed:', e);
+      audioReady = false;
+      return false;
+    }
+  }
+
+  // 取得當前分鐘對應嘅音調組：單數分鐘 A組（高），雙數分鐘 B組（低）
+  function getCurrentTones() {
+    var minute = Math.floor(elapsed / 60000);
+    // 0,2,4...分鐘 = A組（高）；1,3,5...分鐘 = B組（低）
+    return (minute % 2 === 0) ? TONE_SET_A : TONE_SET_B;
+  }
+
+  function playBeatAt(when, isHigh, tones) {
+    if (!audioReady) return;
+    try {
+      var freq = isHigh ? tones[0] : tones[1];
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, when);
+      gain.gain.setValueAtTime(0.0001, when);
+      gain.gain.exponentialRampToValueAtTime(0.3, when + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.08);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(when);
+      osc.stop(when + 0.1);
+    } catch (e) {
+      console.warn('Schedule beat failed:', e);
+    }
+  }
+
+  // 預調度節拍：將未來 SCHEDULE_AHEAD 秒內嘅所有拍預先排好
+  // 咁樣就算頁面熄屏、rAF 停咗，音頻照樣播
+  function scheduleBeats() {
+    if (!audioReady || !audioStartTime) return;
+    var nowCtx = audioCtx.currentTime;
+    var lookAhead = nowCtx + SCHEDULE_AHEAD;
+
+    while (true) {
+      var nextBeatTime = audioStartTime + scheduledBeats * BEAT_MS / 1000;
+      if (nextBeatTime > lookAhead) break;
+      if (nextBeatTime < nowCtx - 0.1) {
+        // 已經過咗，跳過
+        scheduledBeats++;
+        continue;
+      }
+      var beatIdx = scheduledBeats;
+      var isHigh = (beatIdx % 2 === 0);
+      // 呢一拍屬於第幾分鐘 → 用邊組音調
+      var beatElapsedMs = beatIdx * BEAT_MS;
+      var minute = Math.floor(beatElapsedMs / 60000);
+      var tones = (minute % 2 === 0) ? TONE_SET_A : TONE_SET_B;
+      playBeatAt(nextBeatTime, isHigh, tones);
+      scheduledBeats++;
+      if (beatElapsedMs >= TOTAL_MS) break;
+    }
+  }
+
+  function flashBeat(isHigh) {
+    beatDotEl.classList.add('active');
+    beatDotEl.style.background = isHigh ? '#ffeb3b' : '#8bc34a';
+    beatDotEl.style.boxShadow = isHigh
+      ? '0 0 20px #ffeb3b, 0 0 40px #ffeb3b'
+      : '0 0 15px #8bc34a, 0 0 30px #8bc34a';
+    setTimeout(function() { beatDotEl.classList.remove('active'); }, 80);
+  }
+
+  // ===== 時間顯示（正跳：00:00 → 31:00） =====
+  function updateClock() {
+    var current = Math.min(elapsed, TOTAL_MS);
+    var totalSec = Math.floor(current / 1000);
+    var m = Math.floor(totalSec / 60);
+    var s = totalSec % 60;
+    clockEl.textContent = pad2(m) + ':' + pad2(s);
+  }
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+  // ===== 背景顏色跟隨分鐘變化 =====
+  function updateBgColor() {
+    var minute = elapsed / 60000;
+    var progress = Math.min(minute / 31, 1);
+    // 由深紫藍慢慢變成深綠
+    var r = Math.round(15 + progress * 30);
+    var g = Math.round(15 + progress * 80);
+    var b = Math.round(26 + progress * 20);
+    document.body.style.backgroundColor = 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+
+  // ===== 主循環 =====
+  var lastBeatShown = -1;
+
+  function mainLoop() {
+    if (!isRunning || isPaused) return;
+
+    // 用音頻時鐘做基準，熄屏後恢復都準確
+    if (audioReady && audioStartTime) {
+      var ctxNow = audioCtx.currentTime;
+      elapsed = Math.floor((ctxNow - audioStartTime) * 1000);
+    } else {
+      // 音頻未ready就用performance.now兜底
+      var now = performance.now();
+      var dt = now - lastTick;
+      lastTick = now;
+      if (dt > 2000) dt = 100;
+      elapsed += dt;
+    }
+
+    if (elapsed >= TOTAL_MS) {
+      elapsed = TOTAL_MS;
+      updateClock();
+      finishTraining();
+      return;
+    }
+
+    // 預調度未來節拍（熄屏照播）
+    scheduleBeats();
+
+    // 節拍指示燈（只係視覺效果）
+    var currentBeat = Math.floor(elapsed / BEAT_MS);
+    if (currentBeat !== lastBeatShown && currentBeat >= 0) {
+      lastBeatShown = currentBeat;
+      var isHigh = (currentBeat % 2 === 0);
+      flashBeat(isHigh);
+    }
+
+    updateClock();
+    updateBgColor();
+    requestAnimationFrame(mainLoop);
+  }
+
+  // ===== 控制 =====
+  function startTraining() {
+    var now = Date.now();
+    if (now - lastStartAt < 250) return;
+    lastStartAt = now;
+
+    if (isFinished) resetTraining();
+    if (isRunning && !isPaused) return;
+
+    initAudio();
+
+    var isResume = isRunning && isPaused;
+    isRunning = true;
+    isPaused = false;
+    lastTick = performance.now();
+    doneTextEl.classList.remove('show');
+
+    if (audioReady) {
+      if (isResume) {
+        // 暫停後恢復：resume 音頻時鐘就得，節拍會繼續
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(function(e) { console.warn('Resume:', e); });
+        }
+      } else {
+        // 首次開始：設定音頻基準時間
+        audioStartTime = audioCtx.currentTime + 0.1;
+        scheduledBeats = 0;
+        scheduleBeats();
+      }
+    }
+
+    requestAnimationFrame(mainLoop);
+  }
+
+  function pauseTraining() {
+    if (!isRunning) return;
+    isPaused = true;
+    // 暫停音頻時鐘，已排咗嘅節拍都會停
+    if (audioReady && audioCtx.state === 'running') {
+      audioCtx.suspend().catch(function(e) { console.warn('Suspend:', e); });
+    }
+  }
+
+  function resetTraining() {
+    isRunning = false;
+    isPaused = false;
+    isFinished = false;
+    elapsed = 0;
+    beatAccum = 0;
+    beatCount = 0;
+    audioStartTime = 0;
+    scheduledBeats = 0;
+    lastBeatShown = -1;
+
+    // 重置音頻狀態
+    if (audioReady && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(function(){});
+    }
+
+    clockEl.style.color = '#fff';
+    doneTextEl.classList.remove('show');
+    document.body.style.backgroundColor = '#0f0f1a';
+    updateClock();
+  }
+
+  function finishTraining() {
+    isRunning = false;
+    isPaused = false;
+    isFinished = true;
+    clockEl.style.color = '#8bc34a';
+    doneTextEl.classList.add('show');
+  }
+
+  function toggleFullscreen() {
+    var el = document.documentElement;
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(function(e) { console.warn('Fullscreen:', e); });
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+      } else if (el.msRequestFullscreen) {
+        el.msRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      }
+    }
+  }
+
+  // ===== 事件 =====
+  function bindTap(el, handler) {
+    el.addEventListener('click', function(e) { handler(e); });
+    el.addEventListener('touchend', function(e) {
+      e.preventDefault();
+      handler(e);
+    });
+  }
+
+  bindTap(document.getElementById('startBtn'), startTraining);
+  bindTap(document.getElementById('pauseBtn'), pauseTraining);
+  bindTap(document.getElementById('resetBtn'), resetTraining);
+  bindTap(document.getElementById('fullscreenBtn'), toggleFullscreen);
+
+  // 頁面顯示時補充預調度（確保節拍不間斷）
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && isRunning && !isPaused) {
+      scheduleBeats();
+      requestAnimationFrame(mainLoop);
+    }
+  });
+
+  // ===== 初始化 =====
+  updateClock();
+
+})();
+</script>
+</body>
+</html>
